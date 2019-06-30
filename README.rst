@@ -2,6 +2,9 @@
 iso19794
 ========
 
+.. image:: https://readthedocs.org/projects/iso19794/badge/?version=latest
+    :target: https://iso19794.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation Status
 
 .. image:: https://img.shields.io/pypi/l/iso19794.svg
     :target: https://pypi.org/project/iso19794/
