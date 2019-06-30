@@ -1,0 +1,3 @@
+include docs/*
+include iso19794/*
+include README.rst
