@@ -7,7 +7,7 @@ import PIL.Image
 import iso19794
 
 #_______________________________________________________________________________
-class BasicTestCase(unittest.TestCase):
+class TestFIR(unittest.TestCase):
     
     def test_fir1(self):
         # check we can read an ISO image
@@ -49,7 +49,6 @@ class BasicTestCase(unittest.TestCase):
         i = PIL.Image.open(buf)
         self.assertEqual(i.header.nb_repr,3)
         self.assertEqual(i.header.nb_pos,2)
-        #ohe.iso.ISOImagePlugin._debug(i)
 
 # ______________________________________________________________________________
 if __name__=='__main__':

@@ -5,3 +5,4 @@ __copyright__ = "IDEMIA"
 __license__ = "CeCILL-C"
 
 from . import FIR
+from . import FAC

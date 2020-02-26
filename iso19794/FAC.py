@@ -3,13 +3,13 @@
 
 This module defines a Pillow extension to support ISO 19794:2011 images.
 
-ISO 19794-4 Images
+ISO 19794-5 Images
 ------------------
 
 Reading
 '''''''
 
-When opening an ISO 19794-4 image, the following fields are set:
+When opening an ISO 19794-5 image, the following fields are set:
 
 header
     The header of the image with the number of representations (number of frames)
@@ -19,8 +19,8 @@ header
     - ``version``: fixed version (``020``)
     - ``length``: length of the image
     - ``nb_repr``: number of representations
-    - ``cert_flag``: are certification blocks included or not
-    - ``nb_pos``: number of position
+    - ``cert_flag``: always 0
+    - ``temporal_semantics``: number of position
 
 rheader
     The representation header (specific to each frame), containing:
@@ -31,7 +31,6 @@ rheader
     - ``capture_device_vendor_id``
     - ``capture_device_type_id``
     - ``quality_records``: a list of quality records (``score``, ``algo_vendor_id``, ``algo_id``)
-    - ``certification_records``: a list of certification records (``authority_id``, ``scheme_id``)
     - ``position``: the finger/plam position as a text
     - ``number``: the image number
     - ``scale_units``: the scale unit as a text
@@ -76,14 +75,13 @@ To build a single frame image, we first need a representation header. This can b
 a list of key/value.
 
 >>> import datetime
->>> rheader = FIRRepresentationHeader(
+>>> rheader = FACRepresentationHeader(
 ...     length=0,                                       # will be calculated when image is saved
 ...     capture_datetime = datetime.datetime.now(),
 ...     capture_device_technology_id=b'\\x00',          # unknown
 ...     capture_device_vendor_id=b'\\xab\\xcd',
 ...     capture_device_type_id=b'\\x12\\x34',
 ...     quality_records=[],
-...     certification_records=[],
 ...     position='Left index finger',
 ...     number=1,
 ...     scale_units='PPI',
@@ -99,7 +97,7 @@ An image with no representation header will not be generated
 
 >>> import io
 >>> buffer = io.BytesIO()
->>> sample.save(buffer,"FIR")
+>>> sample.save(buffer,"FAC")
 Traceback (most recent call last):
     ...
 AttributeError: 'Image' object has no attribute 'rheader'
@@ -108,11 +106,11 @@ Header must be defined on the image for the save operation to work correctly:
 
 >>> sample.rheader = rheader
 >>> buffer = io.BytesIO()
->>> sample.save(buffer,"FIR")
+>>> sample.save(buffer,"FAC")
 >>> print(len(buffer.getvalue()))   # should be 200*300 + 41 + 16
 60057
 >>> print(buffer.getvalue()[0:3])
-b'FIR'
+b'FAC'
 >>> print(buffer.getvalue()[4:7])
 b'020'
 >>> print(buffer.getvalue()[14])
@@ -121,30 +119,9 @@ b'020'
 Multi-frames image is generated with the ``save_all`` option:
 
 >>> buffer_multi = io.BytesIO()
->>> sample.save(buffer_multi,"FIR",save_all=True,append_images=[sample])
+>>> sample.save(buffer_multi,"FAC",save_all=True,append_images=[sample])
 >>> print(len(buffer_multi.getvalue()))   # should be 2*(200*300 + 41) + 16
 120098
-
-Certification blocks will alter the flag in the header:
-
->>> rheader = rheader._replace(certification_records = [FIRCertificationRecord(b'\\x78\\xab',b'\\x01')])
->>> sample.rheader = rheader
->>> buffer = io.BytesIO()
->>> sample.save(buffer,"FIR")
->>> print(len(buffer.getvalue()))   # should be 200*300 + 42 + 3 + 16
-60061
->>> print(buffer.getvalue()[14])
-1
-
-Image format is automatically detected:
-
->>> nsample = Image.open(buffer)
->>> nsample.mode
-'L'
->>> nsample.size
-(200, 300)
->>> nsample.rheader.certification_records[0].authority_id
-b'x\\xab'
 
 For a single frame image, ``seek`` will fail if we want to access the second frame:
 
@@ -170,7 +147,7 @@ Image can be saved in ``JPEG`` format:
 
 >>> buffer = io.BytesIO()
 >>> sample.rheader = sample.rheader._replace(image_compression_algo='JPEG')
->>> sample.save(buffer,"FIR")
+>>> sample.save(buffer,"FAC")
 >>> print(len(buffer.getvalue()) < 60061)   # should be less than 200*300 + 42 + 3 + 16
 True
 
@@ -179,7 +156,7 @@ The same for a multiframe image:
 >>> nsample = Image.open(buffer_multi)
 >>> buffer = io.BytesIO()
 >>> nsample.rheader = nsample.rheader._replace(image_compression_algo='JPEG')
->>> nsample.save(buffer,"FIR",save_all=True)
+>>> nsample.save(buffer,"FAC",save_all=True)
 >>> print(len(buffer.getvalue())>61000 and  len(buffer.getvalue())<120098)
 True
 
@@ -188,7 +165,7 @@ Both frames can be compressed:
 >>> buffer = io.BytesIO()
 >>> nsample.seek(1)
 >>> nsample.rheader = nsample.rheader._replace(image_compression_algo='JPEG')
->>> nsample.save(buffer,"FIR",save_all=True)
+>>> nsample.save(buffer,"FAC",save_all=True)
 >>> print(len(buffer.getvalue())>61000 and  len(buffer.getvalue())<90000)
 True
 
@@ -204,7 +181,7 @@ for the prerequisites)
 
 >>> buffer = io.BytesIO()
 >>> sample.rheader = sample.rheader._replace(image_compression_algo='JPEG2000_LOSSY')
->>> sample.save(buffer,"FIR")
+>>> sample.save(buffer,"FAC")
 >>> print(len(buffer.getvalue()) < 6000)
 True
 >>> sample2 = PIL.Image.open(buffer)
@@ -214,7 +191,7 @@ False
 
 >>> buffer = io.BytesIO()
 >>> sample.rheader = sample.rheader._replace(image_compression_algo='JPEG2000_LOSSLESS')
->>> sample.save(buffer,"FIR")
+>>> sample.save(buffer,"FAC")
 >>> print(len(buffer.getvalue()) > 20000)
 True
 >>> sample2 = PIL.Image.open(buffer)
@@ -226,16 +203,12 @@ Using an invalid compression algo will raise an exception:
 
 >>> buffer = io.BytesIO()
 >>> sample.rheader = sample.rheader._replace(image_compression_algo='UNKNOWN')
->>> sample.save(buffer,"FIR")
+>>> sample.save(buffer,"FAC")
 Traceback (most recent call last):
     ...
 SyntaxError: Unknown compression algo UNKNOWN
 
 """
-
-# XXX All compressions (missing: PNG)
-# XXX Add table 4 (capture device techno)
-# XXX Add Table 5 (certification schemes)
 
 import io
 import datetime
@@ -252,45 +225,59 @@ from PIL import Image, ImageFile
 #------------------------------------------------------------------------------
 
 # Table 1
-FIRHeader = namedtuple('FIRHeader',[
+FACHeader = namedtuple('FACHeader',[
     'version',
     'length',
     'nb_repr',
     'cert_flag',
-    'nb_pos'
+    'temporal_semantics'
     ])
 
-# Table 2
-FIRRepresentationHeader = namedtuple('FIRRepresentationHeader',[
+
+FACLandmarkPoint = namedtuple('FACLandmarkPoint',[
+    'point_type',
+    'point_code',
+    'x',
+    'y',
+    'z'
+    ])
+
+# 
+FACRepresentationHeader = namedtuple('FACRepresentationHeader',[
     'length',
     'capture_datetime',
     'capture_device_technology_id',
     'capture_device_vendor_id',
     'capture_device_type_id',
     'quality_records',
-    'certification_records',
-    'position',
-    'number',
-    'scale_units',
-    'horizontal_scan_sampling_rate',
-    'vertical_scan_sampling_rate',
-    'horizontal_image_sampling_rate',
-    'vertical_image_sampling_rate',
-    #'bit_depth',                   # available through image.mode
-    'image_compression_algo',
-    'impression_type',
-    #'horizontal_line_length',      # available through image.size
-    #'vertical_line_length'         # available through image.size
+    'landmark_points',
+    'gender',
+    'eye_colour',
+    'hair_colour',
+    'subject_height',
+    'property_mask',
+    'expression',
+    'pose_yaw',
+    'pose_pitch',
+    'pose_roll',
+    'pose_uncertainty_yaw',
+    'pose_uncertainty_pitch',
+    'pose_uncertainty_roll',
+    'face_image_type',
+    'image_data_type',
+    'width',
+    'height',
+    'colour_space',
+    'source_type',
+    'device_type',
+    'quality',
+    'bit_depth',
     ])
 
-
-FIRQualityRecord = namedtuple('FIRQualityRecord',[
+FACQualityRecord = namedtuple('FACQualityRecord',[
     'score',
     'algo_vendor_id',
     'algo_id'])
-FIRCertificationRecord = namedtuple('FIRCertificationRecord',[
-    'authority_id',
-    'scheme_id'])
 
 # Conversion of position (Table 6, 7 and 8)
 POSITION = {
@@ -388,28 +375,32 @@ UNIT = {
 #------------------------------------------------------------------------------
 
 def _accept(prefix):
-    return prefix[:4] == b"FIR\x00"
+    return prefix[:4] == b"FAC\x00"
 
-class FIRImageFile(ImageFile.ImageFile):
+class FACImageFile(ImageFile.ImageFile):
 
-    format = "FIR"
-    format_description = "ISO19794-4 image (fingerprint image)"
+    format = "FAC"
+    format_description = "ISO19794-5 image (face image)"
     _close_exclusive_fp_after_loading = False
 
     def _open(self):
         # General header (§8.2)
-        header = self.fp.read(16)
-        if header[:4] != b"FIR\x00":
-            raise SyntaxError("not a ISO19794-4 file")
+        header = self.fp.read(17)
+        if header[:4] != b"FAC\x00":
+            raise SyntaxError("not a ISO19794-5 file")
 
-        if header[4:8] != b"020\x00":
-            raise SyntaxError("Invalid version for a ISO19794-4 file")
+        if header[4:8] != b"010\x00" and header[4:8] != b"030\x00":
+            raise SyntaxError("Invalid version for a ISO19794-5 file")
 
         # Big Endian (§6.1)
-        self.header = FIRHeader._make(struct.unpack(">4sIH?B",header[4:]))
+        if header[4:8] == b"010\x00":
+            self.header = FACHeader._make(struct.unpack(">4sIH",header[4:14])+(False,0))
+            self.__first = self.__next = 14     # skip the general header
 
-        # setup frame pointers
-        self.__first = self.__next = 16     # skip the general header
+        if header[4:8] == b"030\x00":
+            self.header = FACHeader._make(struct.unpack(">4sIH?H",header[4:17]))
+            self.__first = self.__next = 17     # skip the general header
+
         self.__frame = -1
         self.__fp = self.fp
         self._frame_pos = []
@@ -457,7 +448,7 @@ class FIRImageFile(ImageFile.ImageFile):
         self.fp = self.__fp
         while len(self._frame_pos) <= frame:
             if not self.__next:
-                raise EOFError("no more images in FIR file")
+                raise EOFError("no more images in FAC file")
             # reset python3 buffered io handle in case fp
             # was passed to a libxxx, invalidating the buffer
             self.fp.tell()
@@ -475,33 +466,35 @@ class FIRImageFile(ImageFile.ImageFile):
 
         if ns.bit_depth==8:
             self.mode = "L"
+        else:
+            self.mode = "RGB"
         try:
-            self.size = (ns.horizontal_line_length,ns.vertical_line_length)
+            self.size = (ns.width,ns.height)
         except AttributeError:
             # Support Pillow >= 5.3.0
-            self._size = (ns.horizontal_line_length,ns.vertical_line_length)
+            self._size = (ns.width,ns.height)
 
         # data descriptor
-        # Select decoder: RAW, RAW_PACKED, WSQ, JPEG, JPEG2000_LOSSY, JPEG2000_LOSSLESS, PNG
-        if rheader.image_compression_algo=="RAW" or rheader.image_compression_algo=="RAW_PACKED":
-            self.tile = [
-                ('raw', (0, 0) + self.size, self._frame_pos[frame]+offset, (self.mode, 0, 1))
-            ]
-        elif rheader.image_compression_algo=="WSQ":
-            self.tile = [
-                ('wsq', (0, 0) + self.size, self._frame_pos[frame]+offset, (12,))
-            ]
-        elif rheader.image_compression_algo=="JPEG":
+        # Select decoder
+        if rheader.image_data_type==0:
             self.tile = [
                 ('jpeg', (0, 0) + self.size, self._frame_pos[frame]+offset, (self.mode,self.mode,1,0))
             ]
-        elif rheader.image_compression_algo=="JPEG2000_LOSSY" or rheader.image_compression_algo=="JPEG2000_LOSSLESS":
+        elif rheader.image_data_type==1:
+            sig = self.fp.read(4)
+            codec = "j2k"
+            if sig == b"\xff\x4f\xff\x51":
+                codec = "j2k"
+            else:
+                sig = sig + self.fp.read(8)
+
+                if sig == b"\x00\x00\x00\x0cjP  \x0d\x0a\x87\x0a":
+                    codec = "jp2"
             self.tile = [
-                ('jpeg2k', (0, 0) + self.size, self._frame_pos[frame]+offset, ("j2k",))
+                ('jpeg2k', (0, 0) + self.size, self._frame_pos[frame]+offset, (codec,))
             ]
         else:
-            raise SyntaxError("Unknown compression algo "+rheader.image_compression_algo)
-
+            raise SyntaxError("Unknown image_data_type "+repr(rheader.image_data_type))
 
     def tell(self):
         "Return the current frame number"
@@ -513,51 +506,95 @@ class FIRImageFile(ImageFile.ImageFile):
         nb = 0
         # Temporary namespace used during the analysis of the header
         ns = types.SimpleNamespace()
+        if self.header.version==b"010\x00":
+            ns.length, = struct.unpack(">I",self.fp.read(4))
+            # Init other
+            ns.capture_datetime = datetime.datetime.now()
+            ns.capture_device_technology_id = "\x00"
+            ns.capture_device_vendor_id = "\x00\x00"
+            ns.capture_device_type_id = "\x00\x00"
+            ns.quality_records = []
+            nb += 4
+        if self.header.version==b"030\x00":
+            ns.length,ns.capture_datetime,ns.capture_device_technology_id,ns.capture_device_vendor_id,ns.capture_device_type_id,q_length = \
+                struct.unpack(">I9ss2s2sB",self.fp.read(19))
+            # XXX micro or milli seconds?
+            ns.capture_datetime = datetime.datetime( *struct.unpack(">HBBBBBH",ns.capture_datetime) )
+            nb += 19
+            Q = []
+            for i in range(q_length):
+                Q.append( FACQualityRecord._make( struct.unpack(">B2s2s",self.fp.read(5)) ) )
+                nb += 5
+            ns.quality_records = Q
 
-        ns.length,ns.capture_datetime,ns.capture_device_technology_id,ns.capture_device_vendor_id,ns.capture_device_type_id,q_length = \
-            struct.unpack(">I9ss2s2sB",self.fp.read(19))
-        # XXX micro or milli seconds?
-        ns.capture_datetime = datetime.datetime( *struct.unpack(">HBBBBBH",ns.capture_datetime) )
-        nb += 19
-        Q = []
-        for i in range(q_length):
-            Q.append( FIRQualityRecord._make( struct.unpack(">B2s2s",self.fp.read(5)) ) )
-            nb += 5
-        ns.quality_records = Q
+        # §5.5 Facial Information Block
+        if self.header.version==b"010\x00":
+            ns.number_landmark_points, ns.gender, ns.eye_colour, ns.hair_colour, ns.property_mask, \
+            ns.expression, ns.pose_yaw, ns.pose_pitch, ns.pose_roll, \
+            ns.pose_uncertainty_yaw, ns.pose_uncertainty_pitch, ns.pose_uncertainty_roll = \
+                struct.unpack(">HBBB3s2sbbbbbb",self.fp.read(16))
+            ns.subject_height = 0
+            nb += 16
+        if self.header.version==b"030\x00":
+            ns.number_landmark_points, ns.gender, ns.eye_colour, ns.hair_colour, ns.subject_height, ns.property_mask, \
+            ns.expression, ns.pose_yaw, ns.pose_pitch, ns.pose_roll, \
+            ns.pose_uncertainty_yaw, ns.pose_uncertainty_pitch, ns.pose_uncertainty_roll = \
+                struct.unpack(">HBBBB3s2sbbbbbb",self.fp.read(17))
+            nb += 17
 
-        C = []
-        if self.header.cert_flag:
-            (c_length,) = struct.unpack(">B",self.fp.read(1))
-            nb += 1
-            for i in range(c_length):
-                C.append( FIRCertificationRecord._make( struct.unpack(">2s1s",self.fp.read(3)) ) )
-                nb += 3
-        ns.certification_records = C
+        # §5.6 Landmark Point Block
+        ns.landmark_points = []
+        for n in range(ns.number_landmark_points):
+            ns2 = types.SimpleNamespace()
+            ns2.point_type, ns2.point_code, ns2.x, ns2.y, ns2.z = \
+                struct.unpack(">BBHHH",self.fp.read(8))
+            nb += 8
 
-        ns.position,ns.number,ns.scale_units,ns.horizontal_scan_sampling_rate,ns.vertical_scan_sampling_rate, \
-        ns.horizontal_image_sampling_rate,ns.vertical_image_sampling_rate,ns.bit_depth,ns.image_compression_algo, \
-        ns.impression_type,ns.horizontal_line_length,ns.vertical_line_length,ns.image_data_length = \
-            struct.unpack(">BBBHHHHBBBHHI",self.fp.read(22))
-        nb += 22
+            ns.landmark_points.append(FACLandmarkPoint._make( (
+                ns2.point_type, ns2.point_code, ns2.x, ns2.y, ns2.z
+            )))
 
+        # §5.7 Image Information Block
+        if self.header.version==b"010\x00":
+            ns.face_image_type,ns.image_data_type,ns.width,ns.height,ns.colour_space,ns.source_type,ns.device_type,ns.quality = \
+                struct.unpack(">BBHHBB2sH", self.fp.read(12))
+            nb += 12
+            if ns.colour_space==1:
+                ns.bit_depth = 24
+            elif ns.colour_space==3:
+                ns.bit_depth = 8
+            else:
+                ns.bit_depth = 24
         # Buid the namedtuple and convert part of it
-        nt = FIRRepresentationHeader._make( (
+        nt = FACRepresentationHeader._make( (
             ns.length,
             ns.capture_datetime,ns.capture_device_technology_id,ns.capture_device_vendor_id,ns.capture_device_type_id,
-            ns.quality_records,ns.certification_records,
-            {v: k for k, v in POSITION.items()}[ns.position],
-            ns.number,
-            {v: k for k, v in UNIT.items()}[ns.scale_units],
-            ns.horizontal_scan_sampling_rate,
-            ns.vertical_scan_sampling_rate,
-            ns.horizontal_image_sampling_rate,
-            ns.vertical_image_sampling_rate,
-            #ns.bit_depth,
-            {v: k for k, v in COMPRESSION.items()}[ns.image_compression_algo],
-            {v: k for k, v in IMPRESSION.items()}[ns.impression_type],
-            #ns.horizontal_line_length,
-            #ns.vertical_line_length
+            ns.quality_records,
+            ns.landmark_points,
+            ns.gender,
+            ns.eye_colour,
+            ns.hair_colour,
+            ns.subject_height,
+            ns.property_mask,
+            ns.expression,
+            ns.pose_yaw,
+            ns.pose_pitch,
+            ns.pose_roll,
+            ns.pose_uncertainty_yaw,
+            ns.pose_uncertainty_pitch,
+            ns.pose_uncertainty_roll,
+            ns.face_image_type,
+            ns.image_data_type,
+            ns.width,
+            ns.height,
+            ns.colour_space,
+            ns.source_type,
+            ns.device_type,
+            ns.quality,
+            ns.bit_depth,
             ) )
+
+        # XXX do we need to skip a block after the image?
         return nt,nb,ns
 
 #
@@ -565,7 +602,7 @@ class FIRImageFile(ImageFile.ImageFile):
 #
 import PIL.JpegImagePlugin
 import PIL.Jpeg2KImagePlugin
-def _save_frame(im,fp,cert_flag):
+def _save_frame(im,fp):
     # Return bytes for one frame
     try:
         info = im.encoderinfo
@@ -580,22 +617,7 @@ def _save_frame(im,fp,cert_flag):
     else:
         bit_depth = 24
 
-    if ns.image_compression_algo=="RAW":
-        im.encoderconfig = ()
-        encoder = ('raw', (0, 0) + im.size, 0, (im.mode, 0, 1))
-        bit_depth = 8
-        ImageFile._save(im, image_data, [encoder])
-    elif ns.image_compression_algo=="RAW_PACKED":
-        im.encoderconfig  ()
-        encoder = ('raw', (0, 0) + im.size, 0, (im.mode, 0, 1))
-        bit_depth = 8
-        ImageFile._save(im, image_data, [encoder])
-    elif ns.image_compression_algo=="WSQ":
-        im.encoderconfig  ()
-        encoder = ('wsq', (0, 0) + im.size, 0, (12,))
-        bit_depth = 8
-        ImageFile._save(im, image_data, [encoder])
-    elif ns.image_compression_algo=="JPEG":
+    if ns.image_compression_algo=="JPEG":
         info['quality'] = 'maximum'
         info['dpi'] = (im.rheader.horizontal_image_sampling_rate,im.rheader.vertical_image_sampling_rate)
         PIL.JpegImagePlugin._save(im, image_data, "")
@@ -619,10 +641,6 @@ def _save_frame(im,fp,cert_flag):
     rheader += struct.pack(">s2s2sB",ns.capture_device_technology_id,ns.capture_device_vendor_id,ns.capture_device_type_id,len(ns.quality_records))
     for q in ns.quality_records:
         rheader += struct.pack(">B2s2s",q.score,q.algo_vendor_id,q.algo_id)
-    if cert_flag:
-        rheader += struct.pack(">B",len(ns.certification_records))
-        for c in ns.certification_records:
-            rheader += struct.pack(">2s1s",c.authority_id,c.scheme_id)
 
     rheader += struct.pack(">BBBHHHHBBBHHI",
         ns.position if type(ns.position) is int else POSITION[ns.position],
@@ -649,12 +667,12 @@ def _save_frame(im,fp,cert_flag):
 def _save(im, fp, filename):
 
     fr = io.BytesIO()
-    _save_frame(im,fr,len(im.rheader.certification_records)>0)
+    _save_frame(im,fr)
     fr_data = fr.getvalue()
 
     # Write the general header
-    fp.write(b"FIR\x00")
-    fp.write(struct.pack(">4sIH?B", b"020\x00",16+len(fr_data),1,len(im.rheader.certification_records)>0,1))
+    fp.write(b"FAC\x00")
+    fp.write(struct.pack(">4sIH?H", b"030\x00",17+len(fr_data),1,False,0))
 
     # Write the frame
     fp.write(fr_data)
@@ -676,13 +694,9 @@ def _save_all(im, fp, filename):
                     image.seek(idx)
                     yield image
 
-    # check if there is a certification block
-    cert_flag = False
     # Count number of position
     positions = set()
     for frame in frames(images):
-        if len(frame.rheader.certification_records)>0:
-            cert_flag = True
         positions.add(frame.rheader.position)
 
     # Generate the frames
@@ -690,13 +704,13 @@ def _save_all(im, fp, filename):
     length = 0
     for frame in frames(images):
         fr = io.BytesIO()
-        _save_frame(frame,fr,cert_flag)
+        _save_frame(frame,fr)
         frames_buffers.append( fr.getvalue() )
         length += len(frames_buffers[-1])
 
     # Write the general header
-    fp.write(b"FIR\x00")
-    fp.write(struct.pack(">4sIH?B", b"020\x00",16+length,len(frames_buffers),cert_flag,len(positions)))
+    fp.write(b"FAC\x00")
+    fp.write(struct.pack(">4sIH?H", b"030\x00",17+length,len(frames_buffers),0,1 if len(positions)>1 else 0))
 
     for buf in frames_buffers:
         fp.write(buf)
@@ -710,12 +724,12 @@ def _debug(image):
 #
 # Registration
 #
-Image.register_open(FIRImageFile.format, FIRImageFile, _accept)
-Image.register_save(FIRImageFile.format, _save)
-Image.register_save_all(FIRImageFile.format, _save_all)
+Image.register_open(FACImageFile.format, FACImageFile, _accept)
+Image.register_save(FACImageFile.format, _save)
+Image.register_save_all(FACImageFile.format, _save_all)
 
-Image.register_extension(FIRImageFile.format, ".fir")
-Image.register_mime(FIRImageFile.format, "image/fir")
+Image.register_extension(FACImageFile.format, ".fac")
+Image.register_mime(FACImageFile.format, "image/fac")
 
 
 if __name__ == "__main__":
