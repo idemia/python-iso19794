@@ -9,20 +9,23 @@ ISO 19794-4 Images
 Reading
 '''''''
 
-When opening an ISO 19794-4 image, the following fields are set:
+The :py:meth:`open()` method sets the following ``info`` properties
 
-header
-    The header of the image with the number of representations (number of frames)
-    and the number of positions. The header is not required when saving an image
-    (content will be inferred from the frames). Header contains:
+``version``
+    Fixed version (``020``)
 
-    - ``version``: fixed version (``020``)
-    - ``length``: length of the image
-    - ``nb_repr``: number of representations
-    - ``cert_flag``: are certification blocks included or not
-    - ``nb_pos``: number of position
+``nb_representation``
+    The number of representations, i.e. the number of frames
 
-rheader
+``nb_position``
+    The number of position, i.e. the different finger ranks present in the frames
+
+``certification_flag``
+    A flag indicating if the certification blocks included or not
+
+In addition, each frame has the following additional attributes:
+
+``header``
     The representation header (specific to each frame), containing:
 
     - ``length``: length of this single frame (including this header, the image data and the extended data)
@@ -45,8 +48,6 @@ rheader
     When reading an image the fields ``position``, ``scale_units``, ``image_compression_algo`` and
     ``impression_type`` are converted to readable text. When writing image, the numeric value can be defined
     if this is more convenient to use.
-
-Both header and rheader are returned as namedtuple.
 
 Writing
 '''''''
@@ -76,7 +77,7 @@ To build a single frame image, we first need a representation header. This can b
 a list of key/value.
 
 >>> import datetime
->>> rheader = FIRRepresentationHeader(
+>>> header = FIRRepresentationHeader(
 ...     length=0,                                       # will be calculated when image is saved
 ...     capture_datetime = datetime.datetime.now(),
 ...     capture_device_technology_id=b'\\x00',          # unknown
@@ -102,11 +103,11 @@ An image with no representation header will not be generated
 >>> sample.save(buffer,"FIR")
 Traceback (most recent call last):
     ...
-AttributeError: 'Image' object has no attribute 'rheader'
+AttributeError: 'Image' object has no attribute 'header'
 
 Header must be defined on the image for the save operation to work correctly:
 
->>> sample.rheader = rheader
+>>> sample.header = header
 >>> buffer = io.BytesIO()
 >>> sample.save(buffer,"FIR")
 >>> print(len(buffer.getvalue()))   # should be 200*300 + 41 + 16
@@ -127,8 +128,8 @@ Multi-frames image is generated with the ``save_all`` option:
 
 Certification blocks will alter the flag in the header:
 
->>> rheader = rheader._replace(certification_records = [FIRCertificationRecord(b'\\x78\\xab',b'\\x01')])
->>> sample.rheader = rheader
+>>> header = header._replace(certification_records = [FIRCertificationRecord(b'\\x78\\xab',b'\\x01')])
+>>> sample.header = header
 >>> buffer = io.BytesIO()
 >>> sample.save(buffer,"FIR")
 >>> print(len(buffer.getvalue()))   # should be 200*300 + 42 + 3 + 16
@@ -143,7 +144,7 @@ Image format is automatically detected:
 'L'
 >>> nsample.size
 (200, 300)
->>> nsample.rheader.certification_records[0].authority_id
+>>> nsample.header.certification_records[0].authority_id
 b'x\\xab'
 
 For a single frame image, ``seek`` will fail if we want to access the second frame:
@@ -156,9 +157,9 @@ EOFError: attempt to seek outside sequence
 But it will not fail for a true multi-frame image:
 
 >>> nsample = Image.open(buffer_multi)
->>> nsample.header.nb_repr
+>>> nsample.info['nb_representation']
 2
->>> nsample.header.nb_pos
+>>> nsample.info['nb_position']
 1
 >>> nsample.seek(1)
 >>> nsample.mode
@@ -169,7 +170,7 @@ But it will not fail for a true multi-frame image:
 Image can be saved in ``JPEG`` format:
 
 >>> buffer = io.BytesIO()
->>> sample.rheader = sample.rheader._replace(image_compression_algo='JPEG')
+>>> sample.header = sample.header._replace(image_compression_algo='JPEG')
 >>> sample.save(buffer,"FIR")
 >>> print(len(buffer.getvalue()) < 60061)   # should be less than 200*300 + 42 + 3 + 16
 True
@@ -178,7 +179,7 @@ The same for a multiframe image:
 
 >>> nsample = Image.open(buffer_multi)
 >>> buffer = io.BytesIO()
->>> nsample.rheader = nsample.rheader._replace(image_compression_algo='JPEG')
+>>> nsample.header = nsample.header._replace(image_compression_algo='JPEG')
 >>> nsample.save(buffer,"FIR",save_all=True)
 >>> print(len(buffer.getvalue())>61000 and  len(buffer.getvalue())<120098)
 True
@@ -187,7 +188,7 @@ Both frames can be compressed:
 
 >>> buffer = io.BytesIO()
 >>> nsample.seek(1)
->>> nsample.rheader = nsample.rheader._replace(image_compression_algo='JPEG')
+>>> nsample.header = nsample.header._replace(image_compression_algo='JPEG')
 >>> nsample.save(buffer,"FIR",save_all=True)
 >>> print(len(buffer.getvalue())>61000 and  len(buffer.getvalue())<90000)
 True
@@ -203,7 +204,7 @@ Jpeg2000 is also supported (see https://pillow.readthedocs.io/en/stable/handbook
 for the prerequisites)
 
 >>> buffer = io.BytesIO()
->>> sample.rheader = sample.rheader._replace(image_compression_algo='JPEG2000_LOSSY')
+>>> sample.header = sample.header._replace(image_compression_algo='JPEG2000_LOSSY')
 >>> sample.save(buffer,"FIR")
 >>> print(len(buffer.getvalue()) < 6000)
 True
@@ -213,7 +214,7 @@ True
 False
 
 >>> buffer = io.BytesIO()
->>> sample.rheader = sample.rheader._replace(image_compression_algo='JPEG2000_LOSSLESS')
+>>> sample.header = sample.header._replace(image_compression_algo='JPEG2000_LOSSLESS')
 >>> sample.save(buffer,"FIR")
 >>> print(len(buffer.getvalue()) > 20000)
 True
@@ -225,7 +226,7 @@ True
 Using an invalid compression algo will raise an exception:
 
 >>> buffer = io.BytesIO()
->>> sample.rheader = sample.rheader._replace(image_compression_algo='UNKNOWN')
+>>> sample.header = sample.header._replace(image_compression_algo='UNKNOWN')
 >>> sample.save(buffer,"FIR")
 Traceback (most recent call last):
     ...
@@ -406,14 +407,18 @@ class FIRImageFile(ImageFile.ImageFile):
             raise SyntaxError("Invalid version for a ISO19794-4 file")
 
         # Big Endian (§6.1)
-        self.header = FIRHeader._make(struct.unpack(">4sIH?B",header[4:]))
+        header = FIRHeader._make(struct.unpack(">4sIH?B",header[4:]))
+        self.info['version'] = header.version
+        self.info['nb_representation'] = header.nb_repr
+        self.info['nb_position'] = header.nb_pos
+        self.info['certification_flag'] = header.cert_flag
 
         # setup frame pointers
         self.__first = self.__next = 16     # skip the general header
         self.__frame = -1
         self.__fp = self.fp
         self._frame_pos = []
-        self.n_frames = self.header.nb_repr
+        self.n_frames = header.nb_repr
 
         self._rheaders = []
 
@@ -452,8 +457,8 @@ class FIRImageFile(ImageFile.ImageFile):
 
     def _seek(self, frame):
         # save rheader in case it has been modified
-        if self.__frame>=0 and hasattr(self,"rheader"):
-            self._rheaders[self.__frame] = self.rheader
+        if self.__frame>=0 and hasattr(self,"header"):
+            self._rheaders[self.__frame] = self.header
         self.fp = self.__fp
         while len(self._frame_pos) <= frame:
             if not self.__next:
@@ -469,8 +474,8 @@ class FIRImageFile(ImageFile.ImageFile):
             self.__frame += 1
         self.fp.seek(self._frame_pos[frame])
         rheader,offset,ns = self.read_header()
-        self.rheader = self._rheaders[frame]
-        self.__next = self._frame_pos[frame] + self.rheader.length
+        self.header = self._rheaders[frame]
+        self.__next = self._frame_pos[frame] + self.header.length
         self.__frame = frame
 
         if ns.bit_depth==8:
@@ -496,8 +501,19 @@ class FIRImageFile(ImageFile.ImageFile):
                 ('jpeg', (0, 0) + self.size, self._frame_pos[frame]+offset, (self.mode,self.mode,1,0))
             ]
         elif rheader.image_compression_algo=="JPEG2000_LOSSY" or rheader.image_compression_algo=="JPEG2000_LOSSLESS":
+            sig = self.fp.read(4)
+            codec = None
+            if sig == b"\xff\x4f\xff\x51":
+                codec = "j2k"
+            else:
+                sig = sig + self.fp.read(8)
+
+                if sig == b"\x00\x00\x00\x0cjP  \x0d\x0a\x87\x0a":
+                    codec = "jp2"
+            if codec is None:
+                raise SyntaxError("not a JPEG 2000 image")
             self.tile = [
-                ('jpeg2k', (0, 0) + self.size, self._frame_pos[frame]+offset, ("j2k",))
+                ('jpeg2k', (0, 0) + self.size, self._frame_pos[frame]+offset, (codec,))
             ]
         else:
             raise SyntaxError("Unknown compression algo "+rheader.image_compression_algo)
@@ -526,7 +542,7 @@ class FIRImageFile(ImageFile.ImageFile):
         ns.quality_records = Q
 
         C = []
-        if self.header.cert_flag:
+        if self.info['certification_flag']:
             (c_length,) = struct.unpack(">B",self.fp.read(1))
             nb += 1
             for i in range(c_length):
@@ -574,7 +590,7 @@ def _save_frame(im,fp,cert_flag):
         info = im.encoderinfo
     image_data = io.BytesIO()
 
-    ns = im.rheader
+    ns = im.header
     if im.mode == 'L':
         bit_depth = 8
     else:
@@ -597,7 +613,7 @@ def _save_frame(im,fp,cert_flag):
         ImageFile._save(im, image_data, [encoder])
     elif ns.image_compression_algo=="JPEG":
         info['quality'] = 'maximum'
-        info['dpi'] = (im.rheader.horizontal_image_sampling_rate,im.rheader.vertical_image_sampling_rate)
+        info['dpi'] = (im.header.horizontal_image_sampling_rate,im.header.vertical_image_sampling_rate)
         PIL.JpegImagePlugin._save(im, image_data, "")
     elif ns.image_compression_algo=="JPEG2000_LOSSY":
         info['quality_mode'] = "rates"
@@ -649,12 +665,12 @@ def _save_frame(im,fp,cert_flag):
 def _save(im, fp, filename):
 
     fr = io.BytesIO()
-    _save_frame(im,fr,len(im.rheader.certification_records)>0)
+    _save_frame(im,fr,len(im.header.certification_records)>0)
     fr_data = fr.getvalue()
 
     # Write the general header
     fp.write(b"FIR\x00")
-    fp.write(struct.pack(">4sIH?B", b"020\x00",16+len(fr_data),1,len(im.rheader.certification_records)>0,1))
+    fp.write(struct.pack(">4sIH?B", b"020\x00",16+len(fr_data),1,len(im.header.certification_records)>0,1))
 
     # Write the frame
     fp.write(fr_data)
@@ -681,9 +697,9 @@ def _save_all(im, fp, filename):
     # Count number of position
     positions = set()
     for frame in frames(images):
-        if len(frame.rheader.certification_records)>0:
+        if len(frame.header.certification_records)>0:
             cert_flag = True
-        positions.add(frame.rheader.position)
+        positions.add(frame.header.position)
 
     # Generate the frames
     frames_buffers = []
@@ -706,7 +722,7 @@ def _debug(image):
     for i in range(image.n_frames):
         image.seek(i)
         print("Frame #%d: mode: %s size=%dx%d" % (i,image.mode, image.size[0], image.size[1]))
-        print("\tHeader: ",image.rheader)
+        print("\tHeader: ",image.header)
 #
 # Registration
 #
