@@ -21,7 +21,7 @@ The :py:meth:`open()` method sets the following ``info`` properties
     The number of position, i.e. the different finger ranks present in the frames
 
 ``certification_flag``
-    A flag indicating if the certification blocks included or not
+    A flag indicating if the certification blocks are included or not
 
 In addition, each frame has the following additional attributes:
 
@@ -718,7 +718,7 @@ def _save_all(im, fp, filename):
         fp.write(buf)
 
 def _debug(image):
-    print('GeneralHeader'+str(image.header))
+    print('Info'+str(image.info))
     for i in range(image.n_frames):
         image.seek(i)
         print("Frame #%d: mode: %s size=%dx%d" % (i,image.mode, image.size[0], image.size[1]))
