@@ -28,25 +28,29 @@ In addition, each frame has the following additional attributes:
 ``header``
     The representation header (specific to each frame), containing:
 
-    - ``length``: length of this single frame (including this header, the image data and the extended data)
-    - ``capture_datetime``
-    - ``capture_device_technology_id``
-    - ``capture_device_vendor_id``
-    - ``capture_device_type_id``
-    - ``quality_records``: a list of quality records (``score``, ``algo_vendor_id``, ``algo_id``)
-    - ``position``: the finger/plam position as a text
-    - ``number``: the image number
-    - ``scale_units``: the scale unit as a text
-    - ``horizontal_scan_sampling_rate``
-    - ``vertical_scan_sampling_rate``
-    - ``horizontal_image_sampling_rate``
-    - ``vertical_image_sampling_rate``
-    - ``image_compression_algo``: the compression algo as a text
-    - ``impression_type``: the impression type as text
+    - For version ``010``:
 
-    When reading an image the fields ``position``, ``scale_units``, ``image_compression_algo`` and
-    ``impression_type`` are converted to readable text. When writing image, the numeric value can be defined
-    if this is more convenient to use.
+      - ``landmark_points``
+      - ``gender``
+      - ``eye_colour``
+      - ``hair_colour``
+      - ``property_mask``
+      - ``expression``
+      - ``pose_yaw``
+      - ``pose_pitch``
+      - ``pose_roll``
+      - ``pose_uncertainty_yaw``
+      - ``pose_uncertainty_pitch``
+      - ``pose_uncertainty_roll``
+      - ``face_image_type``
+      - ``image_data_type``
+      - ``source_type``
+      - ``device_type``
+      - ``quality``
+
+      When reading an image the fields ``gender``, ``eye_colour``, ``hair_colour``,
+      ``property_mask``, ``expression``, ``face_image_type``, ``image_data_type`` and ``source_type``
+      are converted to readable text.
 
 Writing
 '''''''
@@ -109,7 +113,14 @@ Traceback (most recent call last):
     ...
 AttributeError: 'Image' object has no attribute 'header'
 
-Header must be defined on the image for the save operation to work correctly:
+Header must be defined on the image for the save operation to work correctly, but
+a minimal header is also possible (default values will be provided)
+
+>>> sample.header = dict()
+>>> buffer = io.BytesIO()
+>>> sample.save(buffer,"FAC", version='010')
+
+Using a fully defined header:
 
 >>> sample.header = header
 >>> buffer = io.BytesIO()
@@ -621,6 +632,7 @@ def _save_frame(im,fp,version):
         #info['dpi'] = (im.header.horizontal_image_sampling_rate,im.header.vertical_image_sampling_rate)
         PIL.JpegImagePlugin._save(im, image_data, "")
     elif ns.get('image_data_type',"JPEG")=="JPEG2000":
+        # XXX compression ratio
         PIL.Jpeg2KImagePlugin._save(im, image_data, "non.j2k")
     else:
         raise SyntaxError("Unknown compression algo "+ns.get('image_data_type',None))
@@ -633,11 +645,11 @@ def _save_frame(im,fp,version):
 
     if version=="010":
         rheader += struct.pack(">HBBB3s2sbbbbbb",
-            len(ns['landmark_points']),
+            len(ns.get('landmark_points',[])),
             GENDER[ns.get('gender','X')],
             EYE_COLOUR[ns.get('eye_colour','UNSPECIFIED')],
             HAIR_COLOUR[ns.get('hair_colour','UNSPECIFIED')],
-            struct.pack(">I", functools.reduce(lambda x,y: x|y, [v for k,v in PROPERTY_FLAGS.items() if k in ns.get('property_mask',[]) ]))[1:] ,
+            struct.pack(">I", functools.reduce(lambda x,y: x|y, [v for k,v in PROPERTY_FLAGS.items() if k in ns.get('property_mask',[]) ],0))[1:] ,
             EXPRESSION[ns.get('expression','UNSPECIFIED')],
             ns.get('pose_yaw',0),
             ns.get('pose_pitch',0),

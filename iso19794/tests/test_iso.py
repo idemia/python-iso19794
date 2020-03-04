@@ -15,7 +15,7 @@ class TestFIR(unittest.TestCase):
         self.assertEqual(i.info['nb_representation'],1)
         self.assertEqual(i.info['nb_position'],1)
         # self.assertEqual(i.info['length'],234441)
-        i.header = i.header._replace(position = 'Right ring finger')
+        i.header['position'] = 'RIGHT_RING_FINGER'
         self.assertRaises(EOFError,i.seek,1)
         # rotate the image
         i2 = i.rotate(45,expand=True,fillcolor=128)        
@@ -31,13 +31,13 @@ class TestFIR(unittest.TestCase):
         i = PIL.Image.open(os.path.join(os.path.dirname(__file__),'twofingers.fir'))
         self.assertEqual(i.info['nb_representation'],2)
         self.assertEqual(i.info['nb_position'],2)
-        self.assertEqual(i.header.position,'Left index finger')
+        self.assertEqual(i.header['position'],'LEFT_INDEX_FINGER')
         i.rotate(90)
         i.seek(1)
         i.rotate(90)
         self.assertEqual(i.info['nb_representation'],2)
         self.assertEqual(i.info['nb_position'],2)
-        self.assertEqual(i.header.position,'Left middle finger')
+        self.assertEqual(i.header['position'],'LEFT_MIDDLE_FINGER')
         self.assertRaises(EOFError,i.seek,2)
 
     def test_multi(self):

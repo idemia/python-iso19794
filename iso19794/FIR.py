@@ -28,7 +28,6 @@ In addition, each frame has the following additional attributes:
 ``header``
     The representation header (specific to each frame), containing:
 
-    - ``length``: length of this single frame (including this header, the image data and the extended data)
     - ``capture_datetime``
     - ``capture_device_technology_id``
     - ``capture_device_vendor_id``
@@ -46,8 +45,7 @@ In addition, each frame has the following additional attributes:
     - ``impression_type``: the impression type as text
 
     When reading an image the fields ``position``, ``scale_units``, ``image_compression_algo`` and
-    ``impression_type`` are converted to readable text. When writing image, the numeric value can be defined
-    if this is more convenient to use.
+    ``impression_type`` are converted to readable text.
 
 Writing
 '''''''
@@ -77,15 +75,14 @@ To build a single frame image, we first need a representation header. This can b
 a list of key/value.
 
 >>> import datetime
->>> header = FIRRepresentationHeader(
-...     length=0,                                       # will be calculated when image is saved
+>>> header = dict(
 ...     capture_datetime = datetime.datetime.now(),
 ...     capture_device_technology_id=b'\\x00',          # unknown
 ...     capture_device_vendor_id=b'\\xab\\xcd',
 ...     capture_device_type_id=b'\\x12\\x34',
 ...     quality_records=[],
 ...     certification_records=[],
-...     position='Left index finger',
+...     position='LEFT_INDEX_FINGER',
 ...     number=1,
 ...     scale_units='PPI',
 ...     horizontal_scan_sampling_rate=500,
@@ -93,7 +90,7 @@ a list of key/value.
 ...     horizontal_image_sampling_rate=500,
 ...     vertical_image_sampling_rate=500,
 ...     image_compression_algo='RAW',
-...     impression_type='Live-scan rolled'
+...     impression_type='LIVESCAN_ROLLED'
 ... )
 
 An image with no representation header will not be generated
@@ -105,7 +102,14 @@ Traceback (most recent call last):
     ...
 AttributeError: 'Image' object has no attribute 'header'
 
-Header must be defined on the image for the save operation to work correctly:
+Header must be defined on the image for the save operation to work correctly, but
+a minimal header is also possible (default values will be provided)
+
+>>> sample.header = dict(image_compression_algo='RAW')
+>>> buffer = io.BytesIO()
+>>> sample.save(buffer,"FIR")
+
+Using a fully defined header:
 
 >>> sample.header = header
 >>> buffer = io.BytesIO()
@@ -128,7 +132,7 @@ Multi-frames image is generated with the ``save_all`` option:
 
 Certification blocks will alter the flag in the header:
 
->>> header = header._replace(certification_records = [FIRCertificationRecord(b'\\x78\\xab',b'\\x01')])
+>>> header['certification_records'] = [FIRCertificationRecord(b'\\x78\\xab',b'\\x01')]
 >>> sample.header = header
 >>> buffer = io.BytesIO()
 >>> sample.save(buffer,"FIR")
@@ -144,7 +148,7 @@ Image format is automatically detected:
 'L'
 >>> nsample.size
 (200, 300)
->>> nsample.header.certification_records[0].authority_id
+>>> nsample.header['certification_records'][0].authority_id
 b'x\\xab'
 
 For a single frame image, ``seek`` will fail if we want to access the second frame:
@@ -170,7 +174,7 @@ But it will not fail for a true multi-frame image:
 Image can be saved in ``JPEG`` format:
 
 >>> buffer = io.BytesIO()
->>> sample.header = sample.header._replace(image_compression_algo='JPEG')
+>>> sample.header['image_compression_algo'] ='JPEG'
 >>> sample.save(buffer,"FIR")
 >>> print(len(buffer.getvalue()) < 60061)   # should be less than 200*300 + 42 + 3 + 16
 True
@@ -179,7 +183,7 @@ The same for a multiframe image:
 
 >>> nsample = Image.open(buffer_multi)
 >>> buffer = io.BytesIO()
->>> nsample.header = nsample.header._replace(image_compression_algo='JPEG')
+>>> nsample.header['image_compression_algo'] ='JPEG'
 >>> nsample.save(buffer,"FIR",save_all=True)
 >>> print(len(buffer.getvalue())>61000 and  len(buffer.getvalue())<120098)
 True
@@ -188,7 +192,7 @@ Both frames can be compressed:
 
 >>> buffer = io.BytesIO()
 >>> nsample.seek(1)
->>> nsample.header = nsample.header._replace(image_compression_algo='JPEG')
+>>> nsample.header['image_compression_algo'] ='JPEG'
 >>> nsample.save(buffer,"FIR",save_all=True)
 >>> print(len(buffer.getvalue())>61000 and  len(buffer.getvalue())<90000)
 True
@@ -204,7 +208,7 @@ Jpeg2000 is also supported (see https://pillow.readthedocs.io/en/stable/handbook
 for the prerequisites)
 
 >>> buffer = io.BytesIO()
->>> sample.header = sample.header._replace(image_compression_algo='JPEG2000_LOSSY')
+>>> sample.header['image_compression_algo'] ='JPEG2000_LOSSY'
 >>> sample.save(buffer,"FIR")
 >>> print(len(buffer.getvalue()) < 6000)
 True
@@ -214,7 +218,7 @@ True
 False
 
 >>> buffer = io.BytesIO()
->>> sample.header = sample.header._replace(image_compression_algo='JPEG2000_LOSSLESS')
+>>> sample.header['image_compression_algo'] ='JPEG2000_LOSSLESS'
 >>> sample.save(buffer,"FIR")
 >>> print(len(buffer.getvalue()) > 20000)
 True
@@ -226,7 +230,7 @@ True
 Using an invalid compression algo will raise an exception:
 
 >>> buffer = io.BytesIO()
->>> sample.header = sample.header._replace(image_compression_algo='UNKNOWN')
+>>> sample.header['image_compression_algo'] ='UNKNOWN'
 >>> sample.save(buffer,"FIR")
 Traceback (most recent call last):
     ...
@@ -251,15 +255,6 @@ from PIL import Image, ImageFile
 # Namedtuple types extracted from the standard for Type 4 (fingerprint and palmprint)
 #
 #------------------------------------------------------------------------------
-
-# Table 1
-FIRHeader = namedtuple('FIRHeader',[
-    'version',
-    'length',
-    'nb_repr',
-    'cert_flag',
-    'nb_pos'
-    ])
 
 # Table 2
 FIRRepresentationHeader = namedtuple('FIRRepresentationHeader',[
@@ -296,50 +291,50 @@ FIRCertificationRecord = namedtuple('FIRCertificationRecord',[
 # Conversion of position (Table 6, 7 and 8)
 POSITION = {
     # Table 6
-    'Unknown': 0,
-    'Right thumb': 1,
-    'Right index finger': 2,
-    'Right middle finger': 3,
-    'Right ring finger': 4,
-    'Right little finger': 5,
-    'Left thumb': 6,
-    'Left index finger': 7,
-    'Left middle finger': 8,
-    'Left ring finger': 9,
-    'Left little finger': 10,
-    'Plain right four fingers': 13,
-    'Plain left four fingers': 14,
-    'Plain thumbs (2)': 15,
+    'UNKNOWN': 0,
+    'RIGHT_THUMB': 1,
+    'RIGHT_INDEX_FINGER': 2,
+    'RIGHT_MIDDLE_FINGER': 3,
+    'RIGHT_RING_FINGER': 4,
+    'RIGHT_LITTLE_FINGER': 5,
+    'LEFT_THUMB': 6,
+    'LEFT_INDEX_FINGER': 7,
+    'LEFT_MIDDLE_FINGER': 8,
+    'LEFT_RING_FINGER': 9,
+    'LEFT_LITTLE_FINGER': 10,
+    'PLAIN_RIGHT_FOUR_FINGERS': 13,
+    'PLAIN_LEFT_FOUR_FINGERS': 14,
+    'PLAIN_THUMBS': 15,
     # Table 7
-    'Right index and middle': 40,
-    'Right middle and ring': 41,
-    'Right ring and little': 42,
-    'Left index and middle': 43,
-    'Left middle and ring': 44,
-    'Left ring and little': 45,
-    'Right index and Left index': 46,
-    'Right index and middle and ring': 47,
-    'Right middle and ring and little': 48,
-    'Left index and middle and ring': 49,
-    'Left middle and ring and little': 50,
+    'RIGHT_INDEX_AND_MIDDLE': 40,
+    'RIGHT_MIDDLE_AND_RING': 41,
+    'RIGHT_RING_AND_LITTLE': 42,
+    'LEFT_INDEX_AND_MIDDLE': 43,
+    'LEFT_MIDDLE_AND_RING': 44,
+    'LEFT_RING_AND_LITTLE': 45,
+    'RIGHT_INDEX_AND_LEFT_INDEX': 46,
+    'RIGHT_INDEX_AND_MIDDLE_AND_RING': 47,
+    'RIGHT_MIDDLE_AND_RING_AND_LITTLE': 48,
+    'LEFT_INDEX_AND_MIDDLE_AND_RING': 49,
+    'LEFT_MIDDLE_AND_RING_AND_LITTLE': 50,
     # Table 8
-    'Unknown palm': 20,
-    'Right full palm': 21,
-    'Right writer\'s palm': 22,
-    'Left full palm': 23,
-    'Left writer\'s palm': 24,
-    'Right lower palm': 25,
-    'Right upper palm': 26,
-    'Left lower palm': 27,
-    'Left upper palm': 28,
-    'Right other': 29,
-    'Left other': 30,
-    'Right interdigital': 31,
-    'Right thenar': 32,
-    'Right hypothenar': 33,
-    'Left interdigital': 34,
-    'Left thenar': 35,
-    'Left hypothenar': 36,
+    'UNKNOWN_PALM': 20,
+    'RIGHT_FULL_PALM': 21,
+    'RIGHT_WRITER_PALM': 22,
+    'LEFT_FULL_PALM': 23,
+    'LEFT_WRITER_PALM': 24,
+    'RIGHT_LOWER_PALM': 25,
+    'RIGHT_UPPER_PALM': 26,
+    'LEFT_LOWER_PALM': 27,
+    'LEFT_UPPER_PALM': 28,
+    'RIGHT_OTHER': 29,
+    'LEFT_OTHER': 30,
+    'RIGHT_INTERDIGITAL': 31,
+    'RIGHT_THENAR': 32,
+    'RIGHT_HYPOTHENAR': 33,
+    'LEFT_INTERDIGITAL': 34,
+    'LEFT_THENAR': 35,
+    'LEFT_HYPOTHENAR': 36,
 }
 
 # Conversion of compression (Table 9)
@@ -355,25 +350,25 @@ COMPRESSION = {
 
 # Conversion of impression type (Table 10)
 IMPRESSION = {
-    'Live-scan plain': 0,
-    'Live-scan rolled': 1,
-    'Nonlive-scan plain': 2,
-    'Nonlive-scan rolled': 3,
-    'Latent impression': 4,
-    'Latent tracing': 5,
-    'Latent photo': 6,
-    'Latent lift': 7,
-    'Live-scan swipe': 8,
-    'Live-scan vertical roll': 9,
-    'Live-scan palm': 10,
-    'Nonlive-scan palm': 11,
-    'Latent palm impression': 12,
-    'Latent palm tracing': 13,
-    'Latent palm photo': 14,
-    'Latent palm lift': 15,
-    'Live-scan optical contactless plain': 24,
-    'Other': 28,
-    'Unknown': 29,
+    'LIVESCAN_PLAIN': 0,
+    'LIVESCAN_ROLLED': 1,
+    'NONLIVESCAN_PLAIN': 2,
+    'NONLIVESCAN_ROLLED': 3,
+    'LATENT_IMPRESSION': 4,
+    'LATENT_TRACING': 5,
+    'LATENT_PHOTO': 6,
+    'LATENT_LIFT': 7,
+    'LIVESCAN_SWIPE': 8,
+    'LIVESCAN_VERTICAL_ROLL': 9,
+    'LIVESCAN_PALM': 10,
+    'NONLIVESCAN_PALM': 11,
+    'LATENT_PALM_IMPRESSION': 12,
+    'LATENT_PALM_TRACING': 13,
+    'LATENT_PALM_PHOTO': 14,
+    'LATENT_PALM_LIFT': 15,
+    'LIVESCAN_OPTICAL_CONTACTLESS_PLAIN': 24,
+    'OTHER': 28,
+    'UNKNOWN': 29,
 }
 
 # Conversion of units (Table 2)
@@ -407,18 +402,15 @@ class FIRImageFile(ImageFile.ImageFile):
             raise SyntaxError("Invalid version for a ISO19794-4 file")
 
         # Big Endian (§6.1)
-        header = FIRHeader._make(struct.unpack(">4sIH?B",header[4:]))
-        self.info['version'] = header.version
-        self.info['nb_representation'] = header.nb_repr
-        self.info['nb_position'] = header.nb_pos
-        self.info['certification_flag'] = header.cert_flag
+        self.info['version'],length,self.info['nb_representation'],self.info['certification_flag'],self.info['nb_position'] = \
+            struct.unpack(">4sIH?B",header[4:])
 
         # setup frame pointers
         self.__first = self.__next = 16     # skip the general header
         self.__frame = -1
         self.__fp = self.fp
         self._frame_pos = []
-        self.n_frames = header.nb_repr
+        self.n_frames = self.info['nb_representation']
 
         self._rheaders = []
 
@@ -470,12 +462,12 @@ class FIRImageFile(ImageFile.ImageFile):
             self._frame_pos.append(self.__next)
             rheader,offset,ns = self.read_header()
             self._rheaders.append(rheader)
-            self.__next = self._frame_pos[frame] + rheader.length
+            self.__next = self._frame_pos[frame] + ns.length
             self.__frame += 1
         self.fp.seek(self._frame_pos[frame])
         rheader,offset,ns = self.read_header()
         self.header = self._rheaders[frame]
-        self.__next = self._frame_pos[frame] + self.header.length
+        self.__next = self._frame_pos[frame] + ns.length
         self.__frame = frame
 
         if ns.bit_depth==8:
@@ -488,19 +480,19 @@ class FIRImageFile(ImageFile.ImageFile):
 
         # data descriptor
         # Select decoder: RAW, RAW_PACKED, WSQ, JPEG, JPEG2000_LOSSY, JPEG2000_LOSSLESS, PNG
-        if rheader.image_compression_algo=="RAW" or rheader.image_compression_algo=="RAW_PACKED":
+        if rheader['image_compression_algo']=="RAW" or rheader['image_compression_algo']=="RAW_PACKED":
             self.tile = [
                 ('raw', (0, 0) + self.size, self._frame_pos[frame]+offset, (self.mode, 0, 1))
             ]
-        elif rheader.image_compression_algo=="WSQ":
+        elif rheader['image_compression_algo']=="WSQ":
             self.tile = [
                 ('wsq', (0, 0) + self.size, self._frame_pos[frame]+offset, (12,))
             ]
-        elif rheader.image_compression_algo=="JPEG":
+        elif rheader['image_compression_algo']=="JPEG":
             self.tile = [
                 ('jpeg', (0, 0) + self.size, self._frame_pos[frame]+offset, (self.mode,self.mode,1,0))
             ]
-        elif rheader.image_compression_algo=="JPEG2000_LOSSY" or rheader.image_compression_algo=="JPEG2000_LOSSLESS":
+        elif rheader['image_compression_algo']=="JPEG2000_LOSSY" or rheader['image_compression_algo']=="JPEG2000_LOSSLESS":
             sig = self.fp.read(4)
             codec = None
             if sig == b"\xff\x4f\xff\x51":
@@ -557,23 +549,23 @@ class FIRImageFile(ImageFile.ImageFile):
         nb += 22
 
         # Buid the namedtuple and convert part of it
-        nt = FIRRepresentationHeader._make( (
-            ns.length,
-            ns.capture_datetime,ns.capture_device_technology_id,ns.capture_device_vendor_id,ns.capture_device_type_id,
-            ns.quality_records,ns.certification_records,
-            {v: k for k, v in POSITION.items()}[ns.position],
-            ns.number,
-            {v: k for k, v in UNIT.items()}[ns.scale_units],
-            ns.horizontal_scan_sampling_rate,
-            ns.vertical_scan_sampling_rate,
-            ns.horizontal_image_sampling_rate,
-            ns.vertical_image_sampling_rate,
-            #ns.bit_depth,
-            {v: k for k, v in COMPRESSION.items()}[ns.image_compression_algo],
-            {v: k for k, v in IMPRESSION.items()}[ns.impression_type],
-            #ns.horizontal_line_length,
-            #ns.vertical_line_length
-            ) )
+        nt = dict (
+            capture_datetime=ns.capture_datetime,
+            capture_device_technology_id=ns.capture_device_technology_id,
+            capture_device_vendor_id=ns.capture_device_vendor_id,
+            capture_device_type_id=ns.capture_device_type_id,
+            quality_records=ns.quality_records,
+            certification_records=ns.certification_records,
+            position={v: k for k, v in POSITION.items()}[ns.position],
+            number=ns.number,
+            scale_units={v: k for k, v in UNIT.items()}[ns.scale_units],
+            horizontal_scan_sampling_rate=ns.horizontal_scan_sampling_rate,
+            vertical_scan_sampling_rate=ns.vertical_scan_sampling_rate,
+            horizontal_image_sampling_rate=ns.horizontal_image_sampling_rate,
+            vertical_image_sampling_rate=ns.vertical_image_sampling_rate,
+            image_compression_algo={v: k for k, v in COMPRESSION.items()}[ns.image_compression_algo],
+            impression_type={v: k for k, v in IMPRESSION.items()}[ns.impression_type],
+            )
         return nt,nb,ns
 
 #
@@ -596,61 +588,65 @@ def _save_frame(im,fp,cert_flag):
     else:
         bit_depth = 24
 
-    if ns.image_compression_algo=="RAW":
+    if ns['image_compression_algo']=="RAW":
         im.encoderconfig = ()
         encoder = ('raw', (0, 0) + im.size, 0, (im.mode, 0, 1))
         bit_depth = 8
         ImageFile._save(im, image_data, [encoder])
-    elif ns.image_compression_algo=="RAW_PACKED":
+    elif ns['image_compression_algo']=="RAW_PACKED":
         im.encoderconfig  ()
         encoder = ('raw', (0, 0) + im.size, 0, (im.mode, 0, 1))
         bit_depth = 8
         ImageFile._save(im, image_data, [encoder])
-    elif ns.image_compression_algo=="WSQ":
+    elif ns['image_compression_algo']=="WSQ":
         im.encoderconfig  ()
         encoder = ('wsq', (0, 0) + im.size, 0, (12,))
         bit_depth = 8
         ImageFile._save(im, image_data, [encoder])
-    elif ns.image_compression_algo=="JPEG":
+    elif ns['image_compression_algo']=="JPEG":
         info['quality'] = 'maximum'
-        info['dpi'] = (im.header.horizontal_image_sampling_rate,im.header.vertical_image_sampling_rate)
+        info['dpi'] = (im.header.get('horizontal_image_sampling_rate',500),im.header.get('vertical_image_sampling_rate',500))
         PIL.JpegImagePlugin._save(im, image_data, "")
-    elif ns.image_compression_algo=="JPEG2000_LOSSY":
+    elif ns['image_compression_algo']=="JPEG2000_LOSSY":
         info['quality_mode'] = "rates"
         info['quality_layers'] = (15,)
         # XXX parameters needed? (up to 15 compression max according to the specs)
         PIL.Jpeg2KImagePlugin._save(im, image_data, "non.j2k")
-    elif ns.image_compression_algo=="JPEG2000_LOSSLESS":
+    elif ns['image_compression_algo']=="JPEG2000_LOSSLESS":
         info['quality_mode'] = "rates"
         info['quality_layers'] = (0,)
         # XXX parameters needed? (up to 15 compression max according to the specs)
         PIL.Jpeg2KImagePlugin._save(im, image_data, "non.j2k")
     else:
-        raise SyntaxError("Unknown compression algo "+ns.image_compression_algo)
+        raise SyntaxError("Unknown compression algo "+ns['image_compression_algo'])
     image_data = image_data.getvalue()
 
-    dt = ns.capture_datetime
+    dt = ns.get('capture_datetime',datetime.datetime.now())
     rheader = b''
     rheader += struct.pack(">HBBBBBH",dt.year,dt.month,dt.day,dt.hour,dt.minute,dt.second,int(dt.microsecond/1000))
-    rheader += struct.pack(">s2s2sB",ns.capture_device_technology_id,ns.capture_device_vendor_id,ns.capture_device_type_id,len(ns.quality_records))
-    for q in ns.quality_records:
+    rheader += struct.pack(">s2s2sB",
+        ns.get('capture_device_technology_id',b'\x00'),
+        ns.get('capture_device_vendor_id',b'\x00\x00'),
+        ns.get('capture_device_type_id',b'\x00\x00'),
+        len(ns.get('quality_records',[])) )
+    for q in ns.get('quality_records',[]):
         rheader += struct.pack(">B2s2s",q.score,q.algo_vendor_id,q.algo_id)
     if cert_flag:
-        rheader += struct.pack(">B",len(ns.certification_records))
-        for c in ns.certification_records:
+        rheader += struct.pack(">B",len(ns.get('certification_records',[])))
+        for c in ns.get('certification_records',[]):
             rheader += struct.pack(">2s1s",c.authority_id,c.scheme_id)
 
     rheader += struct.pack(">BBBHHHHBBBHHI",
-        ns.position if type(ns.position) is int else POSITION[ns.position],
-        ns.number,
-        ns.scale_units if type(ns.scale_units) is int else UNIT[ns.scale_units],
-        ns.horizontal_scan_sampling_rate,
-        ns.vertical_scan_sampling_rate,
-        ns.horizontal_image_sampling_rate,
-        ns.vertical_image_sampling_rate,
+        POSITION[ns.get('position','UNKNOWN')],
+        ns['number'],
+        UNIT[ns.get('scale_units','PPI')],
+        ns.get('horizontal_scan_sampling_rate',500),
+        ns.get('vertical_scan_sampling_rate',500),
+        ns.get('horizontal_image_sampling_rate',500),
+        ns.get('vertical_image_sampling_rate',500),
         bit_depth,
-        ns.image_compression_algo if type(ns.image_compression_algo) is int else COMPRESSION[ns.image_compression_algo],
-        ns.impression_type if type(ns.impression_type) is int else IMPRESSION[ns.impression_type],
+        COMPRESSION[ns.get('image_compression_algo','RAW')],
+        IMPRESSION[ns.get('impression_type','UNKNOWN')],
         im.size[0],
         im.size[1],
         len(image_data)
@@ -665,12 +661,13 @@ def _save_frame(im,fp,cert_flag):
 def _save(im, fp, filename):
 
     fr = io.BytesIO()
-    _save_frame(im,fr,len(im.header.certification_records)>0)
+    im.header.setdefault('number',0)
+    _save_frame(im,fr,len(im.header.get('certification_records',[]))>0)
     fr_data = fr.getvalue()
 
     # Write the general header
     fp.write(b"FIR\x00")
-    fp.write(struct.pack(">4sIH?B", b"020\x00",16+len(fr_data),1,len(im.header.certification_records)>0,1))
+    fp.write(struct.pack(">4sIH?B", b"020\x00",16+len(fr_data),1,len(im.header.get('certification_records',[]))>0,1))
 
     # Write the frame
     fp.write(fr_data)
@@ -697,15 +694,18 @@ def _save_all(im, fp, filename):
     # Count number of position
     positions = set()
     for frame in frames(images):
-        if len(frame.header.certification_records)>0:
+        if len(frame.header.get('certification_records',[]))>0:
             cert_flag = True
-        positions.add(frame.header.position)
+        positions.add(frame.header.get('position','UNKNOWN'))
 
     # Generate the frames
     frames_buffers = []
     length = 0
+    frame_number = 0
     for frame in frames(images):
         fr = io.BytesIO()
+        frame.header.setdefault('number',frame_number)
+        frame_number += 1
         _save_frame(frame,fr,cert_flag)
         frames_buffers.append( fr.getvalue() )
         length += len(frames_buffers[-1])
