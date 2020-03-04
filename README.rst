@@ -14,6 +14,10 @@ iso19794
     :target: https://pypi.org/project/iso19794/
     :alt: Python 3.x
 
+.. image:: https://img.shields.io/pypi/v/iso19794.svg
+    :target: https://pypi.org/project/iso19794/
+    :alt: v?.?
+
 .. image:: https://travis-ci.org/idemia/python-iso19794.svg?branch=master
     :target: https://travis-ci.org/idemia/python-iso19794
     :alt: Build Status (Travis CI)
