@@ -1,10 +1,8 @@
 
 """
 
-This module defines a Pillow extension to support ISO 19794:2011 images.
-
-ISO 19794-5 Images
-------------------
+ISO 19794-5 Images (Face)
+-------------------------
 
 Reading
 '''''''
@@ -16,12 +14,6 @@ The :py:meth:`open()` method sets the following ``info`` properties
 
 ``nb_facial_images``
     The number of representations, i.e. the number of frames
-
-``certification_flag``
-    A flag indicating if the certification blocks are included or not
-
-``temporal_semantics``
-    The temporal semantics
 
 In addition, each frame has the following additional attributes:
 

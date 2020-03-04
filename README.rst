@@ -35,3 +35,13 @@ Installation
 Quick Start
 ===========
 
+To open an ISO 19794 image:
+
+.. code-block:: python
+
+    from import Image
+    import iso19794
+
+    img = Image("my_image.fir")
+    img = Image("my_image.fac")
+

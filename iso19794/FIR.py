@@ -1,10 +1,8 @@
 
 """
 
-This module defines a Pillow extension to support ISO 19794:2011 images.
-
-ISO 19794-4 Images
-------------------
+ISO 19794-4 Images (Print)
+--------------------------
 
 Reading
 '''''''
