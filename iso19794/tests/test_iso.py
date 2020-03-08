@@ -2,8 +2,10 @@
 import unittest
 import io
 import os
+import datetime
 
 import PIL.Image
+import PIL.ImageDraw
 import iso19794
 
 #_______________________________________________________________________________
@@ -16,7 +18,8 @@ class TestFIR(unittest.TestCase):
         self.assertEqual(i.info['nb_position'],1)
         # self.assertEqual(i.info['length'],234441)
         i.header['position'] = 'RIGHT_RING_FINGER'
-        self.assertRaises(EOFError,i.seek,1)
+        with self.assertRaises(EOFError):
+            i.seek(1)
         # rotate the image
         i2 = i.rotate(45,expand=True,fillcolor=128)        
         i2.header = i.header
@@ -38,7 +41,8 @@ class TestFIR(unittest.TestCase):
         self.assertEqual(i.info['nb_representation'],2)
         self.assertEqual(i.info['nb_position'],2)
         self.assertEqual(i.header['position'],'LEFT_MIDDLE_FINGER')
-        self.assertRaises(EOFError,i.seek,2)
+        with self.assertRaises(EOFError):
+            i.seek(2)
 
     def test_multi(self):
         i1 = PIL.Image.open(os.path.join(os.path.dirname(__file__),'annexc.fir'))
@@ -49,6 +53,110 @@ class TestFIR(unittest.TestCase):
         i = PIL.Image.open(buf)
         self.assertEqual(i.info['nb_representation'],3)
         self.assertEqual(i.info['nb_position'],2)
+
+#_______________________________________________________________________________
+class TestFAC(unittest.TestCase):
+
+    def test_v010(self):
+        # Builid a sample image
+        sample = PIL.Image.new("RGB",(200,300),255)
+        draw = PIL.ImageDraw.Draw(sample)
+        for i in range(20,100,10):
+            for n in range(5):
+                draw.ellipse( (i+n,i+n,200-i-n,300-i-n),outline=0)
+
+        # Prepare frame header
+        header = dict(
+            landmark_points=[],
+            gender='M',
+            eye_colour='BLUE',
+            hair_colour='BLACK',
+            property_mask=['GLASSES'],
+            expression='NEUTRAL',
+            pose_yaw=0,
+            pose_pitch=0,
+            pose_roll=0,
+            pose_uncertainty_yaw=0,
+            pose_uncertainty_pitch=0,
+            pose_uncertainty_roll=0,
+            face_image_type='FULL_FRONTAL',
+            image_data_type='JPEG',
+            source_type='STATIC_CAMERA',
+            device_type=b'\\x00\\x00',
+            quality=b'\\x00\\x00',
+        )
+
+        # Header is mandatory
+        buffer = io.BytesIO()
+        with self.assertRaises(AttributeError,msg="'Image' object has no attribute 'header'"):
+            sample.save(buffer,"FAC", version='010')
+
+        sample.header = header
+        buffer = io.BytesIO()
+        sample.save(buffer,"FAC", version='010')
+        self.assertLess(len(buffer.getvalue()),56000)
+
+        # Read the image
+        nsample = PIL.Image.open(buffer)
+        self.assertEqual(nsample.mode, 'RGB')
+        self.assertEqual(nsample.size, (200, 300))
+
+        with self.assertRaises(EOFError):
+            nsample.seek(1)
+
+        # Generate a multi frame image
+        buffer_multi = io.BytesIO()
+        sample.save(buffer_multi,"FAC",save_all=True,append_images=[sample], version='010')
+        self.assertLess(len(buffer_multi.getvalue()),111000)
+
+        # Define compression
+        nsample = PIL.Image.open(buffer_multi)
+        buffer = io.BytesIO()
+        nsample.header['image_data_type'] = 'JPEG2000'
+        nsample.seek(1)
+        nsample.header['image_data_type'] = 'JPEG2000'
+        nsample.save(buffer,"FAC",version='010',save_all=True)
+        self.assertLess(len(buffer.getvalue()),len(buffer_multi.getvalue()))
+
+        # Check JPEG2000 can be read
+        nsample2 = PIL.Image.open(buffer)
+        data = nsample2.load()  # force decoding of the image
+        nsample2.seek(1)
+        data = nsample2.load()
+
+        # Invalid image data type
+        buffer = io.BytesIO()
+        sample.header['image_data_type'] = 'UNKNOWN'
+        with self.assertRaises(SyntaxError,msg="Unknown compression algo UNKNOWN"):
+            sample.save(buffer,"FAC",version='010')
+
+    def test_v010_property_mask(self):
+        # Builid a sample image
+        sample = PIL.Image.new("RGB",(200,300),255)
+        draw = PIL.ImageDraw.Draw(sample)
+        for i in range(20,100,10):
+            for n in range(5):
+                draw.ellipse( (i+n,i+n,200-i-n,300-i-n),outline=0)
+
+        # Prepare frame header
+        header = dict(
+            property_mask=['GLASSES'],  # => b0000 0010 = \x02
+        )
+
+        sample.header = header
+        buffer1 = io.BytesIO()
+        sample.save(buffer1,"FAC", version='010')
+
+        header = dict(
+            property_mask=['GLASSES','BEARD','LEFT_EYE_PATCH','DARK_GLASSES'], # => b1000 1010 = \x8a
+        )
+
+        sample.header = header
+        buffer2 = io.BytesIO()
+        sample.save(buffer2,"FAC", version='010')
+
+        self.assertEqual(buffer1.getvalue()[23:26],b"\x00\x00\x02")
+        self.assertEqual(buffer2.getvalue()[23:26],b"\x00\x02\x8a")
 
 # ______________________________________________________________________________
 if __name__=='__main__':
