@@ -117,8 +117,6 @@ Multi-frames image is generated with the ``save_all`` option:
 
 >>> buffer_multi = io.BytesIO()
 >>> sample.save(buffer_multi,"FAC",save_all=True,append_images=[sample], version='010')
->>> len(buffer_multi.getvalue())<111000
-True
 
 To read an image, just use the standard open function:
 

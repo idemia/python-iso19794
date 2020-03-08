@@ -7,6 +7,7 @@ import datetime
 import PIL.Image
 import PIL.ImageDraw
 import iso19794
+from iso19794.FIR import *
 
 #_______________________________________________________________________________
 class TestFIR(unittest.TestCase):
@@ -54,11 +55,111 @@ class TestFIR(unittest.TestCase):
         self.assertEqual(i.info['nb_representation'],3)
         self.assertEqual(i.info['nb_position'],2)
 
+    def test_v20(self):
+        sample = PIL.Image.new("L",(200,300),255)
+        draw = PIL.ImageDraw.Draw(sample)
+        for i in range(20,100,10):
+            for n in range(5):
+                draw.ellipse( (i+n,i+n,200-i-n,300-i-n),outline=0)
+
+        header = dict(
+            capture_datetime = datetime.datetime.now(),
+            capture_device_technology_id=b'\\x00',          # unknown
+            capture_device_vendor_id=b'\\xab\\xcd',
+            capture_device_type_id=b'\\x12\\x34',
+            quality_records=[],
+            certification_records=[],
+            position='LEFT_INDEX_FINGER',
+            number=1,
+            scale_units='PPI',
+            horizontal_scan_sampling_rate=500,
+            vertical_scan_sampling_rate=500,
+            horizontal_image_sampling_rate=500,
+            vertical_image_sampling_rate=500,
+            image_compression_algo='RAW',
+            impression_type='LIVESCAN_ROLLED'
+        )
+
+        # Header is mandatory
+        buffer = io.BytesIO()
+        with self.assertRaises(AttributeError,msg="'Image' object has no attribute 'header'"):
+            sample.save(buffer,"FIR")
+
+        # Save
+        sample.header = header
+        buffer = io.BytesIO()
+        sample.save(buffer,"FIR")
+        self.assertEqual(len(buffer.getvalue()),200*300+41+16)
+        self.assertEqual(buffer.getvalue()[14],0)
+
+        # Save multi
+        buffer_multi = io.BytesIO()
+        sample.save(buffer_multi,"FIR",save_all=True,append_images=[sample])
+        self.assertEqual(len(buffer_multi.getvalue()), 2*(200*300 + 41) + 16)
+
+        # Check cert flag
+        header['certification_records'] = [FIRCertificationRecord(b'\x78\xab',b'\x01')]
+        sample.header = header
+        buffer = io.BytesIO()
+        sample.save(buffer,"FIR")
+        self.assertEqual(len(buffer.getvalue()),200*300 + 42 + 3 + 16)
+        self.assertEqual(buffer.getvalue()[14],1)
+        with self.assertRaises(EOFError):
+            sample.seek(1)
+
+        # Read the multi frame image
+        nsample = Image.open(buffer)
+        self.assertEqual(nsample.mode,'L')
+        self.assertEqual(nsample.size, (200, 300))
+        self.assertEqual(nsample.header['certification_records'][0].authority_id, b'x\xab')
+
+        # Test JPEG compression
+        buffer = io.BytesIO()
+        sample.header['image_compression_algo'] ='JPEG'
+        sample.save(buffer,"FIR")
+        self.assertLess(len(buffer.getvalue()), 200*300 + 42 + 3 + 16 - 1)
+
+        nsample = Image.open(buffer_multi)
+        buffer = io.BytesIO()
+        nsample.header['image_compression_algo'] ='JPEG'
+        nsample.seek(1)
+        nsample.header['image_compression_algo'] ='JPEG'
+        nsample.save(buffer,"FIR",save_all=True)
+
+        # Read
+
+        nsample2 = PIL.Image.open(buffer)
+        data = nsample2.load()  # force decoding of the image
+        nsample2.seek(1)
+        data = nsample2.load()
+
+        # Test JPEG2000
+        buffer = io.BytesIO()
+        sample.header['image_compression_algo'] ='JPEG2000_LOSSY'
+        sample.save(buffer,"FIR")
+        self.assertLess(len(buffer.getvalue()), 6000)
+        sample2 = PIL.Image.open(buffer)
+        data = sample2.load()
+
+        buffer = io.BytesIO()
+        sample.header['image_compression_algo'] ='JPEG2000_LOSSLESS'
+        sample.save(buffer,"FIR")
+        self.assertGreater(len(buffer.getvalue()), 20000)
+        sample2 = PIL.Image.open(buffer)
+        data = sample2.load()
+        self.assertEqual(sample2.tobytes(),sample.tobytes())
+
+        # Invalid compression
+        buffer = io.BytesIO()
+        sample.header['image_compression_algo'] ='UNKNOWN'
+        with self.assertRaises(SyntaxError, msg="Unknown compression algo UNKNOWN"):
+            sample.save(buffer,"FIR")
+
 #_______________________________________________________________________________
 class TestFAC(unittest.TestCase):
 
     def test_v010(self):
-        # Builid a sample image
+        # Build a sample image
         sample = PIL.Image.new("RGB",(200,300),255)
         draw = PIL.ImageDraw.Draw(sample)
         for i in range(20,100,10):

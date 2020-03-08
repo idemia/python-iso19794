@@ -91,15 +91,6 @@ a list of key/value.
 ...     impression_type='LIVESCAN_ROLLED'
 ... )
 
-An image with no representation header will not be generated
-
->>> import io
->>> buffer = io.BytesIO()
->>> sample.save(buffer,"FIR")
-Traceback (most recent call last):
-    ...
-AttributeError: 'Image' object has no attribute 'header'
-
 Header must be defined on the image for the save operation to work correctly, but
 a minimal header is also possible (default values will be provided)
 
@@ -112,51 +103,17 @@ Using a fully defined header:
 >>> sample.header = header
 >>> buffer = io.BytesIO()
 >>> sample.save(buffer,"FIR")
->>> print(len(buffer.getvalue()))   # should be 200*300 + 41 + 16
-60057
 >>> print(buffer.getvalue()[0:3])
 b'FIR'
 >>> print(buffer.getvalue()[4:7])
 b'020'
->>> print(buffer.getvalue()[14])
-0
 
 Multi-frames image is generated with the ``save_all`` option:
 
 >>> buffer_multi = io.BytesIO()
 >>> sample.save(buffer_multi,"FIR",save_all=True,append_images=[sample])
->>> print(len(buffer_multi.getvalue()))   # should be 2*(200*300 + 41) + 16
-120098
 
-Certification blocks will alter the flag in the header:
-
->>> header['certification_records'] = [FIRCertificationRecord(b'\\x78\\xab',b'\\x01')]
->>> sample.header = header
->>> buffer = io.BytesIO()
->>> sample.save(buffer,"FIR")
->>> print(len(buffer.getvalue()))   # should be 200*300 + 42 + 3 + 16
-60061
->>> print(buffer.getvalue()[14])
-1
-
-Image format is automatically detected:
-
->>> nsample = Image.open(buffer)
->>> nsample.mode
-'L'
->>> nsample.size
-(200, 300)
->>> nsample.header['certification_records'][0].authority_id
-b'x\\xab'
-
-For a single frame image, ``seek`` will fail if we want to access the second frame:
-
->>> nsample.seek(1)
-Traceback (most recent call last):
-    ...
-EOFError: attempt to seek outside sequence
-
-But it will not fail for a true multi-frame image:
+To read an image, just use the standard open function:
 
 >>> nsample = Image.open(buffer_multi)
 >>> nsample.info['nb_representation']
@@ -164,75 +121,28 @@ But it will not fail for a true multi-frame image:
 >>> nsample.info['nb_position']
 1
 >>> nsample.seek(1)
->>> nsample.mode
-'L'
->>> nsample.size
-(200, 300)
 
-Image can be saved in ``JPEG`` format:
-
->>> buffer = io.BytesIO()
->>> sample.header['image_compression_algo'] ='JPEG'
->>> sample.save(buffer,"FIR")
->>> print(len(buffer.getvalue()) < 60061)   # should be less than 200*300 + 42 + 3 + 16
-True
-
-The same for a multiframe image:
+To specify the compression algorithm:
 
 >>> nsample = Image.open(buffer_multi)
 >>> buffer = io.BytesIO()
 >>> nsample.header['image_compression_algo'] ='JPEG'
->>> nsample.save(buffer,"FIR",save_all=True)
->>> print(len(buffer.getvalue())>61000 and  len(buffer.getvalue())<120098)
-True
-
-Both frames can be compressed:
-
->>> buffer = io.BytesIO()
 >>> nsample.seek(1)
 >>> nsample.header['image_compression_algo'] ='JPEG'
 >>> nsample.save(buffer,"FIR",save_all=True)
->>> print(len(buffer.getvalue())>61000 and  len(buffer.getvalue())<90000)
-True
-
-And then read again:
-
->>> nsample2 = PIL.Image.open(buffer)
->>> data = nsample2.load()  # force decoding of the image
->>> nsample2.seek(1)
->>> data = nsample2.load()
 
 Jpeg2000 is also supported (see https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#jpeg-2000
-for the prerequisites)
+for the prerequisites), use ``JPEG2000_LOSSY``
 
 >>> buffer = io.BytesIO()
 >>> sample.header['image_compression_algo'] ='JPEG2000_LOSSY'
 >>> sample.save(buffer,"FIR")
->>> print(len(buffer.getvalue()) < 6000)
-True
->>> sample2 = PIL.Image.open(buffer)
->>> data = sample2.load()
->>> sample2.tobytes()==sample.tobytes()
-False
+
+or ``JPEG2000_LOSSLESS``
 
 >>> buffer = io.BytesIO()
 >>> sample.header['image_compression_algo'] ='JPEG2000_LOSSLESS'
 >>> sample.save(buffer,"FIR")
->>> print(len(buffer.getvalue()) > 20000)
-True
->>> sample2 = PIL.Image.open(buffer)
->>> data = sample2.load()
->>> sample2.tobytes()==sample.tobytes()
-True
-
-Using an invalid compression algo will raise an exception:
-
->>> buffer = io.BytesIO()
->>> sample.header['image_compression_algo'] ='UNKNOWN'
->>> sample.save(buffer,"FIR")
-Traceback (most recent call last):
-    ...
-SyntaxError: Unknown compression algo UNKNOWN
 
 """
 
