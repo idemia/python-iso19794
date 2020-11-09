@@ -18,8 +18,8 @@ iso19794
     :target: https://pypi.org/project/iso19794/
     :alt: v?.?
 
-.. image:: https://travis-ci.org/idemia/python-iso19794.svg?branch=master
-    :target: https://travis-ci.org/idemia/python-iso19794
+.. image:: https://travis-ci.com/idemia/python-iso19794.svg?branch=master
+    :target: https://travis-ci.com/idemia/python-iso19794
     :alt: Build Status (Travis CI)
 
 .. image:: https://codecov.io/gh/idemia/python-iso19794/branch/master/graph/badge.svg
